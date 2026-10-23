@@ -2,7 +2,7 @@ import Foundation
 
 // Local usage statistics, the TokenWatch part: reads the JSONL logs Claude Code and Codex already
 // write, aggregates tokens per hour/model, prices them. Only counts are kept, never content.
-// Incremental: per-file offsets are cached in ~/Library/Caches/AIQuota, so only new bytes are parsed.
+// Incremental: per-file offsets are cached in ~/Library/Caches/VibeToken, so only new bytes are parsed.
 
 enum Source: String, Codable { case claude, codex }
 
@@ -83,7 +83,7 @@ enum Pricing {
     }()
     static let fallback = Rate(input: 1.25, cached: 0.125, output: 10)
 
-    static var overridesPath: String { home + "/Library/Application Support/AIQuota/pricing.json" }
+    static var overridesPath: String { home + "/Library/Application Support/VibeToken/pricing.json" }
 
     /// Optional user overrides: { "model-id": { "input": 1.25, "cached": 0.125, "cacheWrite": 0, "output": 10 } } (USD / 1M).
     static let table: [String: Rate] = {
@@ -164,7 +164,7 @@ struct CacheFile: Codable { var version: Int; var pricing: String; var files: [S
 
 final class UsageStore {
     static let cacheVersion = 4
-    private let queue = DispatchQueue(label: "aiquota.scan", qos: .utility)
+    private let queue = DispatchQueue(label: "vibetoken.scan", qos: .utility)
     private var files: [String: FileState] = [:]
     private var loaded = false
     private var scanning = false
@@ -173,7 +173,7 @@ final class UsageStore {
     private(set) var snapshot: [String: FileState] = [:]
     private(set) var lastScan: Date?
 
-    var cachePath: String { home + "/Library/Caches/AIQuota/usage.plist" }
+    var cachePath: String { home + "/Library/Caches/VibeToken/usage.plist" }
 
     func scan(reset: Bool = false, completion: @escaping () -> Void) {
         queue.async { [self] in

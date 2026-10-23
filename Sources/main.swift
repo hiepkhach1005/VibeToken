@@ -5,7 +5,7 @@ import UserNotifications
 // MARK: - Preferences & localisation
 
 let defaults = UserDefaults.standard
-var lang: String { defaults.string(forKey: "lang") ?? "vi" }
+var lang: String { defaults.string(forKey: "lang") ?? "en" }
 func tr(_ vi: String, _ en: String) -> String { lang == "vi" ? vi : en }
 
 // MARK: - Formatting
@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// `AIQuota --dump`: print the menu bar text and menu contents, then exit (for testing).
+    /// `VibeToken --dump`: print the menu bar text and menu contents, then exit (for testing).
     func dumpIfDone() {
         guard CommandLine.arguments.contains("--dump"), lastUpdate != nil, store.lastScan != nil else { return }
         build()
@@ -590,7 +590,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
             let sample = """
             {
-              "$comment": "USD per 1M tokens. Keys starting with $ are ignored. Restart AIQuota after editing.",
+              "$comment": "USD per 1M tokens. Keys starting with $ are ignored. Restart VibeToken after editing.",
               "$example-model": { "input": 1.25, "cached": 0.125, "cacheWrite": 0, "output": 10 }
             }
             """

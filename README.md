@@ -1,80 +1,82 @@
-# AIQuota
+# VibeToken
 
-App menubar macOS siêu nhẹ để xem **quota của Claude Code và Codex**, kèm thống kê token và chi phí giống [TokenWatch](https://github.com/alvin0/token-watch). Không cần đăng nhập thêm: app đọc thông tin đăng nhập sẵn có trên máy.
+A super-light macOS menu bar app that shows your **Claude Code and Codex quota**, plus token and cost statistics in the spirit of [TokenWatch](https://github.com/alvin0/token-watch). No extra sign-in: it reads the credentials already on your Mac.
 
-<p align="center"><img src="docs/screenshot.png" alt="AIQuota" width="460"></p>
+<p align="center"><img src="docs/screenshot.png" alt="VibeToken" width="460"></p>
 
 ```
-✳ 5H 5% · W 87%        ← % quota còn lại: phiên 5 giờ · tuần
+✳ 5H 5% · W 87%        ← quota left: 5-hour session · weekly
 ```
 
-- Swift + AppKit thuần, không thư viện ngoài, 3 file mã nguồn.
-- Không icon trên Dock, không cửa sổ, chỉ có một `NSMenu`. Giao diện sáng/tối tự theo theme của máy.
-- Nhẹ: khoảng 50 MB RAM, CPU 0% khi rảnh. Một Timer chạy mỗi 5 phút và gọi song song cho các provider.
-- Provider nào chưa đăng nhập hoặc chưa sử dụng thì tự ẩn.
+- Pure Swift + AppKit, no dependencies, 3 source files.
+- No Dock icon, no windows: just an `NSMenu`. Light/dark follows the system theme.
+- Light: about 50 MB RAM and 0% CPU when idle. One timer fires every 5 minutes and queries providers in parallel.
+- Providers you are not signed in to, or not using, are hidden.
 
-## Cài đặt
+## Install
 
-**Tải bản build sẵn:** vào [Releases](../../releases), tải `AIQuota.zip`, giải nén rồi kéo `AIQuota.app` vào `~/Applications` hoặc `/Applications`.
-App được ký ad-hoc, chưa notarize. Vì vậy lần đầu mở, bạn chuột phải vào app → **Open** (hoặc chạy `xattr -dr com.apple.quarantine AIQuota.app`).
+**Download:** grab `VibeToken.zip` from [Releases](../../releases), unzip it, and drag `VibeToken.app` to `~/Applications` or `/Applications`.
+The app is ad-hoc signed, not notarized. The first time, right-click it and choose **Open** (or run `xattr -dr com.apple.quarantine VibeToken.app`).
 
-**Tự build** (cần Xcode Command Line Tools, macOS 13 trở lên):
+**Build from source** (Xcode Command Line Tools, macOS 13+):
 
 ```bash
-./build.sh             # build, cài vào ~/Applications rồi mở app
-./build.sh --no-open   # chỉ build và cài
-./build.sh --release   # build universal (Apple Silicon + Intel) -> build/AIQuota.zip
+./build.sh             # build, install to ~/Applications, launch
+./build.sh --no-open   # build and install only
+./build.sh --release   # universal build (Apple Silicon + Intel) -> build/VibeToken.zip
 ```
 
-## Tính năng
+`VibeToken.app/Contents/MacOS/VibeToken --dump` prints the whole menu to the terminal and exits, which is handy for checking numbers.
+
+## Features
 
 **Quota (Claude Code / Codex)**
-- Phiên 5h và tuần: % còn lại kèm % đã dùng, giờ reset, thời gian còn lại.
-- Quota tuần theo model hoặc tính năng (Opus, Sonnet, Code Review…) nếu API trả về. Thêm tỉ lệ tuần theo nơi dùng và extra usage.
-- Context của phiên gần nhất (ví dụ `21.8% · 218.3K / 1.0M · tên dự án`).
-- Tài khoản, tổ chức, gói (Pro/Max, Plus/Pro/Team…).
+- 5-hour session and weekly windows: % left and % used, reset time, time remaining.
+- Per-model or per-feature weekly limits (Opus, Sonnet, Code Review…) when the API returns them, plus weekly usage by surface and extra usage.
+- Context of the latest session, e.g. `21.8% · 218.3K / 1.0M · project`.
+- Account, organization, plan (Pro/Max, Plus/Pro/Team…).
 
-**Thống kê sử dụng (giống TokenWatch)**
-- Lọc theo nguồn (Tất cả / Codex / Claude) và khoảng thời gian (Hôm nay, 7 ngày, 7 tuần, 6 tháng, 2 năm).
-- Chi phí so với kỳ trước. Token theo loại: input, output, cache đọc, cache ghi, reasoning. Số lượt, tool, model, chi phí mỗi lượt.
-- Biểu đồ theo tokens, chi phí hoặc lượt. Có thêm top model, tool calls, các phiên và insights.
+**Usage statistics (TokenWatch-style)**
+- Filter by source (All / Codex / Claude) and period (Today, 7 days, 7 weeks, 6 months, 2 years).
+- Cost compared with the previous period, and tokens by type: input, output, cache read, cache write, reasoning. Also turns, tool calls, models, and cost per turn.
+- Trend chart by tokens, cost, or turns. Top models, tool calls, sessions, and insights.
 
-**Tuỳ chọn**
-- Tiếng Việt / English.
-- Hiện chi phí hôm nay trên menubar.
-- Thông báo khi quota ≥ 80% / 95%.
-- Cảnh báo chi phí theo ngày/tuần/tháng (báo ở mức 80/95/100%).
-- Giá model tuỳ chỉnh, quét lại toàn bộ log.
-- Làm mới (⌘R), Mở lúc đăng nhập, Thoát (⌘Q).
+**Options**
+- English / Tiếng Việt.
+- Show today's cost in the menu bar.
+- Notify when quota ≥ 80% / 95%.
+- Daily, weekly, and monthly cost alerts, which notify at 80%, 95%, and 100% of the budget.
+- Custom model pricing, and a full log rescan.
+- Refresh (⌘R), Open at Login, Quit (⌘Q).
 
-## Dữ liệu lấy từ đâu
+## Where the data comes from
 
-| | Quota | Tài khoản |
+| | Quota | Account |
 |---|---|---|
-| Claude Code | `GET api.anthropic.com/api/oauth/usage`, dùng token đọc từ Keychain `Claude Code-credentials` (dự phòng: `~/.claude/.credentials.json`) | `oauthAccount` trong `~/.claude.json` |
-| Codex | Event `token_count` cuối cùng có `rate_limits` trong `~/.codex/sessions/**/rollout-*.jsonl`. Nếu log đã cũ hơn giờ reset thì gọi `GET chatgpt.com/backend-api/wham/usage` (endpoint lấy từ source [openai/codex](https://github.com/openai/codex)) | Decode JWT `id_token` trong `~/.codex/auth.json` |
+| Claude Code | `GET api.anthropic.com/api/oauth/usage`, with the token read from the Keychain item `Claude Code-credentials` (fallback: `~/.claude/.credentials.json`) | `oauthAccount` in `~/.claude.json` |
+| Codex | The last `token_count` event with `rate_limits` in `~/.codex/sessions/**/rollout-*.jsonl`. If that data is older than the reset time, VibeToken calls `GET chatgpt.com/backend-api/wham/usage` (endpoint taken from [openai/codex](https://github.com/openai/codex)) | Decoded `id_token` JWT in `~/.codex/auth.json` |
 
-Thống kê token và chi phí đọc từ log JSONL của Claude Code và Codex. App chỉ lưu số đếm, không lưu nội dung, và cache tăng dần trong `~/Library/Caches/AIQuota`. Chi phí tính theo bảng giá của TokenWatch. Có thể ghi đè giá trong `~/Library/Application Support/AIQuota/pricing.json` (đơn vị USD / 1 triệu token).
+Token and cost statistics come from the JSONL logs that Claude Code and Codex already write. VibeToken keeps only counts, never content, and caches them incrementally in `~/Library/Caches/VibeToken`. Costs use TokenWatch's price table. You can override prices in `~/Library/Application Support/VibeToken/pricing.json` (USD per 1M tokens).
 
-## Quyền riêng tư & an toàn
+## Privacy & safety
 
-- App chỉ đọc. Không bao giờ refresh token, không ghi vào Keychain, `~/.claude*` hay `~/.codex/`. Refresh sẽ xoay vòng token và làm CLI bị đăng xuất.
-- Token chỉ được gửi tới `api.anthropic.com` và `chatgpt.com`. App không log token và không có analytics.
-- Token hết hạn: provider đó hiện `—` kèm dòng "Mở … để đăng nhập lại".
-- Lỗi mạng: giữ số cũ và ghi "(dữ liệu cũ)". App không gọi API quá 1 lần mỗi 30 giây.
+- Read-only. VibeToken never refreshes tokens and never writes to the Keychain, `~/.claude*`, or `~/.codex/`. Refreshing would rotate the token and sign the CLI out.
+- Tokens are only sent to `api.anthropic.com` and `chatgpt.com`. Nothing is logged, and there are no analytics.
+- Expired sign-in: the provider shows `—` with a "sign in again" hint.
+- Network errors: the last good numbers are kept and marked "(stale data)". The APIs are called at most once every 30 seconds.
 
-## Gỡ cài đặt
+## Uninstall
 
-1. Bỏ chọn **Mở lúc đăng nhập** trong menu (hoặc vào System Settings → General → Login Items).
-2. Bấm **Thoát** (⌘Q).
-3. Xoá app và dữ liệu:
+1. Untick **Open at Login** in the menu (or remove the app in System Settings → General → Login Items).
+2. **Quit** (⌘Q).
+3. Delete the app and its data:
 
 ```bash
-rm -rf ~/Applications/AIQuota.app ~/Library/Caches/AIQuota "$HOME/Library/Application Support/AIQuota"
-defaults delete com.vibetoken.AIQuota
+rm -rf ~/Applications/VibeToken.app ~/Library/Caches/VibeToken "$HOME/Library/Application Support/VibeToken"
+defaults delete com.vibetoken.VibeToken
 ```
 
-## Ghi công
+## Credits
 
-- Ý tưởng, bảng giá model và icon Claude/Codex lấy từ [TokenWatch](https://github.com/alvin0/token-watch) của alvin0 (MIT).
-- Tác giả: **Bá Vương**. Giấy phép [MIT](LICENSE).
+- The idea, the model price table, and the Claude/Codex icons come from [TokenWatch](https://github.com/alvin0/token-watch) by alvin0 (MIT).
+- Author: **Bá Vương**. Licensed under [MIT](LICENSE).

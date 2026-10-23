@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.vibetoken.AIQuota</string>
+	<string>com.vibetoken.VibeToken</string>
 	<key>CFBundleName</key>
-	<string>AIQuota</string>
+	<string>VibeToken</string>
 	<key>CFBundleDisplayName</key>
-	<string>AIQuota</string>
+	<string>VibeToken</string>
 	<key>CFBundleExecutable</key>
-	<string>AIQuota</string>
+	<string>VibeToken</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
