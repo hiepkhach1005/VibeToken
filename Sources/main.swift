@@ -181,24 +181,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Refresh
 
+    /// Providers shown in the menu bar; only these are polled by the timer.
+    var barProviders: [ProviderID] {
+        let bar = defaults.string(forKey: "bar") ?? "both"
+        return ProviderID.allCases.filter { bar == "both" || bar == $0.rawValue }
+    }
+
+    /// Timer / wake: menu bar providers only. ⌘R (from the menu): everything.
     @objc func refresh() {
         store.scan { [weak self] in self?.updateTitle(); self?.checkCostAlerts(); self?.dumpIfDone() }
-        // The usage endpoints are rate limited: never call them more than once per 30 s.
-        guard !refreshing, Date().timeIntervalSince(lastUpdate ?? .distantPast) > 30 else { return }
+        let manual = NSApp.currentEvent?.type == .keyDown || menuOpen
+        fetch(manual || CommandLine.arguments.contains("--dump") ? ProviderID.allCases : barProviders, minAge: 30)
+    }
+
+    var lastFetch: [ProviderID: Date] = [:]
+    var inFlight = Set<ProviderID>()
+    var menuOpen = false
+
+    /// The usage endpoints are rate limited: a provider is never called more than once per `minAge` seconds.
+    func fetch(_ ids: [ProviderID], minAge: TimeInterval) {
+        let due = providers.filter { p in
+            ids.contains(p.id) && !inFlight.contains(p.id) && Date().timeIntervalSince(lastFetch[p.id] ?? .distantPast) > minAge
+        }
+        guard !due.isEmpty else { return }
+        due.forEach { inFlight.insert($0.id) }
         refreshing = true
-        let providers = self.providers
         Task {
             let results = await withTaskGroup(of: Quota.self) { g -> [Quota] in
-                for p in providers { g.addTask { await p.fetch() } }
+                for p in due { g.addTask { await p.fetch() } }
                 var out: [Quota] = []
                 for await q in g { out.append(q) }
                 return out
             }
-            for q in results { merge(q) }
+            for q in results { merge(q); lastFetch[q.provider] = Date(); inFlight.remove(q.provider) }
             lastUpdate = Date()
-            refreshing = false
+            refreshing = !inFlight.isEmpty
             updateTitle()
             checkQuotaAlerts()
+            if menuOpen { build() }     // fill in the open menu as data arrives
             // Transient failure with nothing to show yet (e.g. HTTP 429 right after launch): retry sooner than the 5-min timer.
             if results.contains(where: { if case .network = $0.status { return quotas[$0.provider]?.windows.isEmpty ?? true }; return false }) {
                 if quickRetries < 2 {
@@ -210,9 +230,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // Providers hidden from the menu bar are only fetched when the menu opens (and data is older than 60 s).
+    func menuWillOpen(_ menu: NSMenu) {
+        menuOpen = true
+        fetch(ProviderID.allCases.filter { !barProviders.contains($0) }, minAge: 60)
+    }
+    func menuDidClose(_ menu: NSMenu) { menuOpen = false }
+
     /// `VibeToken --dump`: print the menu bar text and menu contents, then exit (for testing).
     func dumpIfDone() {
-        guard CommandLine.arguments.contains("--dump"), lastUpdate != nil, store.lastScan != nil else { return }
+        guard CommandLine.arguments.contains("--dump"), lastUpdate != nil, inFlight.isEmpty, store.lastScan != nil else { return }
         build()
         print("MENUBAR: \(statusItem.button?.title ?? "")")
         func walk(_ m: NSMenu, _ indent: String) {
@@ -242,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func save(_ q: Quota) {
         let wins: [[String: Any]] = q.windows.map { w in
             var d: [String: Any] = ["noNew": w.noNewData]
-            switch w.kind { case .session: d["k"] = "s"; case .weekly: d["k"] = "w"; case .scoped(let l): d["k"] = "x"; d["l"] = l }
+            switch w.kind { case .session: d["k"] = "s"; case .weekly: d["k"] = "w"; case .scoped(let l): d["k"] = "x"; d["l"] = l; case .window(let l): d["k"] = "o"; d["l"] = l }
             if let p = w.usedPct { d["p"] = p }
             if let r = w.resetsAt { d["r"] = r.timeIntervalSince1970 }
             return d
@@ -259,7 +286,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let d = defaults.dictionary(forKey: "saved.\(id.rawValue)") else { return nil }
         var q = Quota(provider: id)
         q.windows = ((d["w"] as? [[String: Any]]) ?? []).map { w in
-            let kind: WindowKind = w["k"] as? String == "s" ? .session : w["k"] as? String == "w" ? .weekly : .scoped(w["l"] as? String ?? "")
+            let l = w["l"] as? String ?? ""
+            let kind: WindowKind = switch w["k"] as? String { case "s": .session; case "w": .weekly; case "o": .window(l); default: .scoped(l) }
             return QuotaWindow(kind: kind, usedPct: w["p"] as? Double, resetsAt: (w["r"] as? Double).map(Date.init(timeIntervalSince1970:)), noNewData: w["noNew"] as? Bool ?? false)
         }
         q.extras = d["e"] as? [String] ?? []
@@ -282,7 +310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func updateTitle() {
         var segs: [Seg] = []
-        for (i, q) in visible.enumerated() {
+        let bar = defaults.string(forKey: "bar") ?? "both"   // which providers appear in the menu bar
+        for (i, q) in visible.filter({ bar == "both" || bar == $0.provider.rawValue }).enumerated() {
             if i > 0 { segs.append(.text("    ", nil)) }
             segs.append(.icon(q.provider))
             guard !q.windows.isEmpty else { segs.append(.text(" —", nil)); continue }
@@ -292,8 +321,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 segs.append(.text(label, nil))
                 segs.append(.text("\(Int((100 - used).rounded()))%", nil))
             }
-            part(" 5H ", q.session)
-            part(" · W ", q.weekly)
+            if q.session != nil || q.weekly != nil {
+                part(" 5H ", q.session)
+                part(" · W ", q.weekly)
+            } else if let w = q.windows.first {
+                // e.g. Codex Free: a single 30-day window.
+                if case .window(let s) = w.kind { part(" \(s.uppercased()) ", w) } else { part(" ", w) }
+            }
         }
         if defaults.bool(forKey: "showCost") && store.lastScan != nil {
             segs.append(.text("    " + Fmt.usd(store.costSince(Calendar.current.startOfDay(for: Date()))), nil))
@@ -389,6 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .session: title = tr("Phiên 5h", "5h session")
             case .weekly: title = tr("Tuần", "Weekly")
             case .scoped(let s): title = tr("Tuần · ", "Weekly · ") + s
+            case .window(let s): title = tr("Giới hạn \(s)", "\(s) limit")
             }
             var detail = w.usedPct.map { tr("còn \(Fmt.pct(100 - $0)) (đã dùng \(Fmt.pct($0)))", "\(Fmt.pct(100 - $0)) left (\(Fmt.pct($0)) used)") } ?? ""
             if let r = w.resetsAt { detail += (detail.isEmpty ? "" : ", ") + Fmt.reset(r) }
@@ -539,6 +574,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func optionsItem() -> NSMenuItem {
         let m = NSMenu()
         m.addItem(radioSubmenu(tr("Ngôn ngữ", "Language"), [("vi", "Tiếng Việt"), ("en", "English")], key: "lang", current: lang))
+        m.addItem(radioSubmenu(tr("Hiện trên menubar", "Show in menu bar"), [("both", tr("Cả hai", "Both")), ("claude", "Claude"), ("codex", "Codex")],
+                               key: "bar", current: defaults.string(forKey: "bar") ?? "both"))
         let cost = action(tr("Hiện chi phí hôm nay trên menubar", "Show today's cost in menu bar"), #selector(toggleDefault(_:)))
         cost.representedObject = "showCost"; cost.state = defaults.bool(forKey: "showCost") ? .on : .off
         m.addItem(cost)
@@ -564,6 +601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if key.hasPrefix("budget.") { defaults.set(Double(value) ?? 0, forKey: key); requestNotifications() }
         else { defaults.set(value, forKey: key) }
         if key == "lang" { refresh() }
+        if key == "bar" { fetch(barProviders, minAge: 30) }
         updateTitle()
     }
 

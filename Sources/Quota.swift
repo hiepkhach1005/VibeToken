@@ -8,6 +8,7 @@ enum WindowKind: Equatable {
     case session                // 5h
     case weekly                 // 7 days, all models
     case scoped(String)         // weekly per model / surface / feature, label already human readable
+    case window(String)         // a window of another length, e.g. "30d" on the Free plan
 }
 
 struct QuotaWindow {
@@ -88,7 +89,8 @@ func jsonFile(_ path: String) -> [String: Any]? {
 }
 
 func num(_ v: Any?) -> Double? {
-    if let n = v as? NSNumber, !(v is Bool) { let d = n.doubleValue; return d.isFinite ? d : nil }
+    // `is Bool` is true for any NSNumber 0/1, so check the CF type to tell real booleans apart.
+    if let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { let d = n.doubleValue; return d.isFinite ? d : nil }
     if let s = v as? String { return Double(s) }
     return nil
 }
@@ -347,7 +349,7 @@ struct CodexProvider: QuotaProvider {
         if m <= 6 * 60 { return .session }
         if m >= 6 * 24 * 60 && m <= 8 * 24 * 60 { return .weekly }
         let label = m.truncatingRemainder(dividingBy: 1440) == 0 ? "\(Int(m / 1440))d" : "\(Int(m / 60))h"
-        return .scoped(label)
+        return .window(label)
     }
 
     static func parseAPI(_ o: [String: Any], into q: inout Quota) -> Bool {
@@ -361,7 +363,7 @@ struct CodexProvider: QuotaProvider {
                 var k = kind(minutes: secs.map { $0 / 60 }, fallback: key == "primary_window" ? "primary" : "secondary")
                 if let prefix {
                     let base: String
-                    switch k { case .session: base = "5h"; case .weekly: base = tr("tuần", "weekly"); case .scoped(let s): base = s }
+                    switch k { case .session: base = "5h"; case .weekly: base = tr("tuần", "weekly"); case .scoped(let s), .window(let s): base = s }
                     k = .scoped("\(prefix) · \(base)")
                 }
                 let win = QuotaWindow(kind: k, usedPct: num(w["used_percent"]), resetsAt: reset)

@@ -10,7 +10,7 @@ A super-light macOS menu bar app that shows your **Claude Code and Codex quota**
 
 - Pure Swift + AppKit, no dependencies, 3 source files.
 - No Dock icon, no windows: just an `NSMenu`. Light/dark follows the system theme.
-- Light: about 50 MB RAM and 0% CPU when idle. One timer fires every 5 minutes and queries providers in parallel.
+- Light: about 50 MB RAM and 0% CPU when idle. One timer fires every 5 minutes and queries the menu bar providers in parallel.
 - Providers you are not signed in to, or not using, are hidden.
 
 ## Install
@@ -43,6 +43,7 @@ The app is ad-hoc signed, not notarized. The first time, right-click it and choo
 
 **Options**
 - English / Tiếng Việt.
+- Show in menu bar: Both (default), Claude, or Codex. A provider hidden from the menu bar is not polled; it is fetched only when you open the menu.
 - Show today's cost in the menu bar.
 - Notify when quota ≥ 80% / 95%.
 - Daily, weekly, and monthly cost alerts, which notify at 80%, 95%, and 100% of the budget.
